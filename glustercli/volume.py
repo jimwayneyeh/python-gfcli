@@ -1,6 +1,17 @@
-import subprocess
 import logging
 import StringIO
+import re
+from utils import runtime
+
+class Volume:
+    def __init__ (self, volume_name):
+        self._log = logging.getLogger("gfs.glustercli.volume")
+        
+        self.program = ["/usr/sbin/gluster", 
+                        "volume", 
+                        "info",
+                        volume_name]
+
 
 class Quota:
     '''
@@ -18,29 +29,29 @@ class Quota:
                         "list"]
     
     def get_dir_quota (self, dir_name):
+        '''
+            Get the quota information of a specified directory.
+            
+            Args:
+                dir_name - Name of the directory for checking the quota.
+
+            Return:
+                A list in following format:
+                [ directory_name, hard_limit (bytes), soft_limit, used (bytes), available (bytes), 
+                    exceed_hard_limit (boolean), exceed_soft_limit (boolean) ]
+                None is returned if the specified directory has no quota limitation.
+
+            Raises:
+                None.
+        '''
         self._log.debug("Get the quota for directory '%s'" % dir_name)
         
         # Send the command to GlusterFS CLI.
-        try:
-            self._log.debug("Try to execute the command %s." % self.program)
-            proc = subprocess.Popen(self.program, stdout=subprocess.PIPE)
-            process_res = proc.communicate()
-        except OSError, e:
-            print e.output
-            raise
-        except ValueError, e:
-            print e.output
-            raise
-        except subprocess.CalledProcessError,e:
-            print e.output
-            raise
+        buf = runtime.execute(self.program)
         
         '''
             Parse the response from the command line of GlusterFS client.
         '''
-        # Use StringIO to format the response into lines.
-        buf = StringIO.StringIO(process_res[0])
-        
         # Ensure the format of directory name to "/....".
         if not dir_name.startswith("/"):
             dir_name = "/%s" % dir_name
@@ -84,10 +95,21 @@ class Quota:
                         soft_exceeded,  # Soft-limit
                         hard_exceeded   # Hard-limit
                     ]
+            
+        return None
                 
     def _format_quota (self, quota):
         '''
             Convert the specified quota from "..TB", "..GB", "..MB", or "..KB" to an integer in bytes.
+            
+            Args:
+                quota - A quota description returned by the GlusterFS CLI. The format should be like "256GB".
+
+            Returns:
+                An integer which represents the quota in bytes. 
+
+            Raises:
+                ValueError - Invalid format of the input parameter.
         '''
         if quota.endswith("TB"):
             return int(float(quota[:-2]) * 1099511627776)
